@@ -23,6 +23,13 @@ def _database_error(exc: Exception) -> HTTPException:
     )
 
 
+def _review_query(db: Session, status: str):
+    query = db.query(models.ReviewItem)
+    if status and status != "all":
+        query = query.filter(models.ReviewItem.status == status)
+    return query
+
+
 @router.get("", response_model=list[schemas.ReviewOut])
 def list_reviews(
     status: str = Query(default="open"),
@@ -31,13 +38,43 @@ def list_reviews(
     db: Session = Depends(get_db),
 ):
     return (
-        db.query(models.ReviewItem)
-        .filter(models.ReviewItem.status == status)
+        _review_query(db, status)
         .order_by(models.ReviewItem.id.desc())
         .offset(offset)
         .limit(limit)
         .all()
     )
+
+
+@router.get("/page")
+def page_reviews(
+    status: str = Query(default="open"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    query = _review_query(db, status)
+    total = query.order_by(None).count()
+    total_pages = max(1, (total + page_size - 1) // page_size)
+    page = min(max(page, 1), total_pages)
+    offset = (page - 1) * page_size
+    items = query.order_by(models.ReviewItem.id.desc()).offset(offset).limit(page_size).all()
+    return {
+        "items": [schemas.ReviewOut.model_validate(item).model_dump(mode="json") for item in items],
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
+    }
+
+
+@router.get("/count")
+def count_reviews(
+    status: str = Query(default="open"),
+    db: Session = Depends(get_db),
+):
+    total = _review_query(db, status).count()
+    return {"total": total}
 
 
 @router.get("/{review_id}", response_model=schemas.ReviewOut)
