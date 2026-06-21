@@ -113,8 +113,3 @@ backend/app/
 dashboard/
   dashboard.py         Streamlit admin UI
 ```
-
-
-## Dashboard UI v1.4
-
-نسخه v1.4 داشبورد را مرتب‌تر کرده و برای `Attributes` و `Review queue` صفحه‌بندی اضافه می‌کند. برای هر attribute فقط یک دکمه `Edit` نمایش داده می‌شود و فرم ویرایش فقط برای همان آیتم باز می‌شود. جزئیات بیشتر در `DASHBOARD_UI_V1.4.md` آمده است.
