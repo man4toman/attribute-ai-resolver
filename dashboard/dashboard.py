@@ -113,7 +113,7 @@ hr { margin-top: .7rem; margin-bottom: .7rem; }
 
 st.markdown('<div class="main-title">Attribute AI Resolver</div>', unsafe_allow_html=True)
 st.markdown(
-    f'<div class="subtle">Version: <b>v1.6-english-ui</b> | API: <code>{escape(API_BASE_URL)}</code> | Docs: <code>http://localhost:8000/docs</code></div>',
+    f'<div class="subtle">Version: <b>v1.6.1-english-ui</b> | API: <code>{escape(API_BASE_URL)}</code> | Docs: <code>http://localhost:8000/docs</code></div>',
     unsafe_allow_html=True,
 )
 
