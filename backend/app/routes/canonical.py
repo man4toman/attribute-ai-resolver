@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
 from app import models, schemas
 from app.db import get_db
-from app.normalizer import make_slug, normalize_sample_values
+from app.normalizer import make_slug, normalize_sample_values, normalize_text
 from app.services import add_alias, create_canonical_attribute, get_canonical, reindex_canonical_attribute, unique_slug
 
 router = APIRouter(prefix="/canonical", tags=["canonical attributes"])
@@ -39,8 +40,24 @@ def list_canonical(
     if active is not None:
         query = query.filter(models.CanonicalAttribute.active.is_(active))
     if q:
-        like = f"%{q.strip()}%"
-        query = query.filter(models.CanonicalAttribute.name.ilike(like))
+        raw_q = q.strip()
+        norm_q = normalize_text(raw_q)
+        raw_like = f"%{raw_q}%"
+        norm_like = f"%{norm_q}%" if norm_q else raw_like
+        query = (
+            query
+            .outerjoin(models.AttributeAlias)
+            .filter(
+                or_(
+                    models.CanonicalAttribute.name.ilike(raw_like),
+                    models.CanonicalAttribute.slug.ilike(raw_like),
+                    models.CanonicalAttribute.category_hint.ilike(raw_like),
+                    models.AttributeAlias.alias_raw.ilike(raw_like),
+                    models.AttributeAlias.alias_norm.ilike(norm_like),
+                )
+            )
+            .distinct()
+        )
     return query.order_by(models.CanonicalAttribute.id.desc()).offset(offset).limit(limit).all()
 
 

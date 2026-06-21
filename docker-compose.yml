@@ -25,6 +25,12 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://attribute_ai:attribute_ai@db:5432/attribute_ai}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-m3}
       EMBEDDING_DIMENSION: ${EMBEDDING_DIMENSION:-1024}
+      HF_HOME: /root/.cache/huggingface
+      HF_HUB_CACHE: /root/.cache/huggingface/hub
+      SENTENCE_TRANSFORMERS_HOME: /root/.cache/huggingface/sentence-transformers
+      HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-0}
+      HF_HUB_DISABLE_TELEMETRY: "1"
+      HF_HUB_DISABLE_SYMLINKS_WARNING: "1"
     ports:
       - "8000:8000"
     volumes:
