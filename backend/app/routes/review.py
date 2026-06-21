@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app import models, schemas
@@ -13,6 +14,13 @@ def _get_review(db: Session, review_id: int) -> models.ReviewItem:
     if not review:
         raise HTTPException(status_code=404, detail="Review item not found.")
     return review
+
+
+def _database_error(exc: Exception) -> HTTPException:
+    return HTTPException(
+        status_code=500,
+        detail=f"Database error: {type(exc).__name__}: {exc}",
+    )
 
 
 @router.get("", response_model=list[schemas.ReviewOut])
@@ -57,7 +65,9 @@ def approve_review(
             confidence=review.candidate_score or 1.0,
             approved=True,
             reindex=True,
+            fail_on_reindex_error=False,
         )
+        review = _get_review(db, review_id)
         review.status = "approved"
         review.decision = "approved_match"
         review.resolved_attribute_id = attr.id
@@ -69,6 +79,15 @@ def approve_review(
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Integrity error: {exc.orig}") from exc
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise _database_error(exc) from exc
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {type(exc).__name__}: {exc}") from exc
 
 
 @router.post("/{review_id}/create-attribute", response_model=schemas.ReviewOut)
@@ -91,7 +110,9 @@ def create_attribute_from_review(
             sample_values=review.sample_values,
             aliases=aliases,
             reindex=True,
+            fail_on_reindex_error=False,
         )
+        review = _get_review(db, review_id)
         review.status = "approved"
         review.decision = "created_new_attribute"
         review.resolved_attribute_id = attr.id
@@ -102,6 +123,15 @@ def create_attribute_from_review(
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Integrity error: {exc.orig}") from exc
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise _database_error(exc) from exc
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {type(exc).__name__}: {exc}") from exc
 
 
 @router.post("/{review_id}/ignore", response_model=schemas.ReviewOut)

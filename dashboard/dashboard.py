@@ -31,10 +31,14 @@ def split_csv(value: str) -> list[str]:
 
 def show_error(exc: Exception) -> None:
     if isinstance(exc, requests.HTTPError):
+        status = exc.response.status_code if exc.response is not None else "unknown"
         try:
-            st.error(exc.response.json())
+            body = exc.response.json()
+            detail = body.get("detail", body) if isinstance(body, dict) else body
+            st.error(f"HTTP {status}: {detail}")
         except Exception:
-            st.error(str(exc))
+            text = exc.response.text if exc.response is not None else str(exc)
+            st.error(f"HTTP {status}: {text or exc}")
     else:
         st.error(str(exc))
 

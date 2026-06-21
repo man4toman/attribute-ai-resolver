@@ -23,6 +23,9 @@ class CanonicalCreate(BaseModel):
     category_hint: str | None = None
     sample_values: list[str] = Field(default_factory=list)
     aliases: list[str] = Field(default_factory=list)
+    # Keep API usable even if local embedding model is not ready.
+    # The route will create the attribute first and then try to reindex.
+    reindex: bool = True
 
 
 class CanonicalUpdate(BaseModel):
@@ -120,6 +123,9 @@ class CreateFromReviewRequest(BaseModel):
     category_hint: str | None = None
     aliases: list[str] = Field(default_factory=list)
     notes: str | None = None
+    # If true, embeddings are built after the canonical attribute is saved.
+    # If embedding generation fails, the review is still approved and a note is saved.
+    reindex: bool = True
 
 
 class IgnoreReviewRequest(BaseModel):

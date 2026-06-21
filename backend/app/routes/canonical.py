@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app import models, schemas
@@ -13,7 +14,9 @@ router = APIRouter(prefix="/canonical", tags=["canonical attributes"])
 @router.post("", response_model=schemas.CanonicalOut)
 def create_canonical(payload: schemas.CanonicalCreate, db: Session = Depends(get_db)):
     try:
-        return create_canonical_attribute(
+        # Create the attribute first. Then try embedding generation separately.
+        # This prevents local AI/model/cache problems from breaking normal data entry.
+        attr = create_canonical_attribute(
             db=db,
             name=payload.name,
             slug=payload.slug,
@@ -21,11 +24,30 @@ def create_canonical(payload: schemas.CanonicalCreate, db: Session = Depends(get
             category_hint=payload.category_hint,
             sample_values=payload.sample_values,
             aliases=payload.aliases,
-            reindex=True,
+            reindex=False,
         )
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Database constraint error. The attribute name, slug, or alias probably already exists.",
+        ) from exc
+
+    if payload.reindex:
+        try:
+            reindex_canonical_attribute(db, attr.id)
+            db.commit()
+        except Exception:  # noqa: BLE001 - keep dashboard workflow alive
+            # Attribute and aliases were already saved. User can reindex later from Tools.
+            db.rollback()
+
+    result = get_canonical(db, attr.id)
+    if not result:
+        raise HTTPException(status_code=500, detail="Canonical attribute was created but could not be loaded.")
+    return result
 
 
 @router.get("", response_model=list[schemas.CanonicalOut])
@@ -99,6 +121,9 @@ def update_canonical(canonical_id: int, payload: schemas.CanonicalUpdate, db: Se
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail="Database constraint error. This name, slug, or alias may already exist.") from exc
 
 
 @router.delete("/{canonical_id}")
