@@ -1,4 +1,5 @@
 import os
+import re
 from typing import Any
 
 import pandas as pd
@@ -25,8 +26,26 @@ def api_post(path: str, payload: dict | None = None) -> Any:
     return response.json()
 
 
-def split_csv(value: str) -> list[str]:
-    return [item.strip() for item in value.split(",") if item.strip()]
+def api_patch(path: str, payload: dict | None = None) -> Any:
+    response = requests.patch(f"{API_BASE_URL}{path}", json=payload or {}, timeout=120)
+    response.raise_for_status()
+    return response.json()
+
+
+def api_delete(path: str, **params: Any) -> Any:
+    clean_params = {k: v for k, v in params.items() if v is not None}
+    response = requests.delete(f"{API_BASE_URL}{path}", params=clean_params, timeout=120)
+    response.raise_for_status()
+    return response.json()
+
+
+def split_values(value: str) -> list[str]:
+    """Split comma/newline/pipe separated input values."""
+    return [item.strip() for item in re.split(r"[,\n|]+", value or "") if item.strip()]
+
+
+def join_values(values: list[Any]) -> str:
+    return "\n".join(str(v) for v in values or [])
 
 
 def show_error(exc: Exception) -> None:
@@ -96,7 +115,6 @@ def create_starter_attributes() -> tuple[int, list[str]]:
             created += 1
             messages.append(f"created #{result['id']} {result['name']}")
         except requests.HTTPError as exc:
-            # Most likely duplicate name/slug/alias. Keep going.
             try:
                 detail = exc.response.json()
             except Exception:
@@ -131,7 +149,7 @@ with resolve_tab:
     with st.form("resolve_form"):
         raw_name = st.text_input("Raw attribute name", value="Ram")
         category = st.text_input("Category/context", value="laptop")
-        sample_values_raw = st.text_input("Sample values, comma separated", value="8GB, 16GB, DDR4")
+        sample_values_raw = st.text_input("Sample values, comma/newline separated", value="8GB, 16GB, DDR4")
         create_review = st.checkbox("Create review item for uncertain results", value=True)
         submitted = st.form_submit_button("Resolve")
 
@@ -142,7 +160,7 @@ with resolve_tab:
                 {
                     "raw_name": raw_name,
                     "category": category,
-                    "sample_values": split_csv(sample_values_raw),
+                    "sample_values": split_values(sample_values_raw),
                     "create_review": create_review,
                 },
             )
@@ -254,7 +272,7 @@ with review_tab:
                     with st.form(f"create_new_{item['id']}"):
                         new_name = st.text_input("Name", value=item["input_raw"], key=f"new_name_{item['id']}")
                         new_slug = st.text_input("Slug optional", value="", key=f"new_slug_{item['id']}")
-                        new_aliases = st.text_input("Extra aliases, comma separated", value="", key=f"new_aliases_{item['id']}")
+                        new_aliases = st.text_input("Extra aliases, comma/newline separated", value="", key=f"new_aliases_{item['id']}")
                         create_submitted = st.form_submit_button("Create new attribute")
                         if create_submitted:
                             try:
@@ -263,7 +281,7 @@ with review_tab:
                                     {
                                         "name": new_name,
                                         "slug": new_slug or None,
-                                        "aliases": split_csv(new_aliases),
+                                        "aliases": split_values(new_aliases),
                                         "notes": "Created from dashboard",
                                     },
                                 )
@@ -288,12 +306,15 @@ with review_tab:
 
 with attributes_tab:
     st.subheader("Canonical attributes")
+    st.caption("Create, edit, deactivate/reactivate canonical attributes, and manage aliases from here.")
+
     with st.form("create_attribute_form"):
         name = st.text_input("Name")
         slug = st.text_input("Slug optional")
+        description = st.text_area("Description optional", height=80)
         category_hint = st.text_input("Category hint optional")
-        aliases = st.text_input("Aliases, comma separated")
-        sample_values = st.text_input("Sample values, comma separated")
+        aliases = st.text_area("Aliases, comma/newline separated", height=80)
+        sample_values = st.text_area("Sample values, comma/newline separated", height=80)
         create_attr = st.form_submit_button("Create attribute")
 
     if create_attr:
@@ -303,9 +324,10 @@ with attributes_tab:
                 {
                     "name": name,
                     "slug": slug or None,
+                    "description": description or None,
                     "category_hint": category_hint,
-                    "aliases": split_csv(aliases),
-                    "sample_values": split_csv(sample_values),
+                    "aliases": split_values(aliases),
+                    "sample_values": split_values(sample_values),
                 },
             )
             st.success(f"Created canonical attribute #{result['id']}")
@@ -313,21 +335,200 @@ with attributes_tab:
         except Exception as exc:
             show_error(exc)
 
-    q = st.text_input("Search canonical attributes", value="")
+    st.divider()
+    st.write("### Search and edit")
+    col_q, col_status, col_limit = st.columns([3, 1, 1])
+    with col_q:
+        q = st.text_input("Search canonical attributes", value="")
+    with col_status:
+        active_filter = st.selectbox("Active filter", ["active", "inactive", "all"], index=0)
+    with col_limit:
+        limit = st.number_input("Limit", min_value=10, max_value=1000, value=200, step=10)
+
+    active_param: bool | None
+    if active_filter == "active":
+        active_param = True
+    elif active_filter == "inactive":
+        active_param = False
+    else:
+        active_param = None
+
     try:
-        attrs = api_get("/canonical", q=q or None, active=True, limit=200)
+        attrs = api_get("/canonical", q=q or None, active=active_param, limit=int(limit))
         rows = []
         for attr in attrs:
             rows.append(
                 {
                     "id": attr["id"],
+                    "active": attr["active"],
                     "name": attr["name"],
                     "slug": attr["slug"],
+                    "category": attr.get("category_hint") or "",
                     "aliases": ", ".join(a["alias_raw"] for a in attr.get("aliases", [])),
                     "samples": ", ".join(str(v) for v in attr.get("sample_values", [])),
                 }
             )
         st.dataframe(pd.DataFrame(rows), use_container_width=True)
+
+        for attr in attrs:
+            aliases_list = attr.get("aliases", []) or []
+            title = f"#{attr['id']} | {attr['name']} | {len(aliases_list)} aliases | {'active' if attr['active'] else 'inactive'}"
+            with st.expander(title, expanded=False):
+                st.write("#### Edit canonical")
+                with st.form(f"edit_attr_{attr['id']}"):
+                    edit_name = st.text_input("Name", value=attr.get("name") or "", key=f"edit_name_{attr['id']}")
+                    edit_slug = st.text_input("Slug", value=attr.get("slug") or "", key=f"edit_slug_{attr['id']}")
+                    edit_description = st.text_area(
+                        "Description",
+                        value=attr.get("description") or "",
+                        height=90,
+                        key=f"edit_description_{attr['id']}",
+                    )
+                    edit_category = st.text_input(
+                        "Category hint",
+                        value=attr.get("category_hint") or "",
+                        key=f"edit_category_{attr['id']}",
+                    )
+                    edit_samples = st.text_area(
+                        "Sample values, one per line or comma separated",
+                        value=join_values(attr.get("sample_values", [])),
+                        height=100,
+                        key=f"edit_samples_{attr['id']}",
+                    )
+                    edit_active = st.checkbox("Active", value=bool(attr.get("active")), key=f"edit_active_{attr['id']}")
+                    save_attr = st.form_submit_button("Save canonical changes")
+
+                if save_attr:
+                    try:
+                        api_patch(
+                            f"/canonical/{attr['id']}",
+                            {
+                                "name": edit_name,
+                                "slug": edit_slug or None,
+                                "description": edit_description or None,
+                                "category_hint": edit_category,
+                                "sample_values": split_values(edit_samples),
+                                "active": edit_active,
+                            },
+                        )
+                        st.success("Canonical attribute updated.")
+                        st.rerun()
+                    except Exception as exc:
+                        show_error(exc)
+
+                col_add, col_manage = st.columns([1, 2])
+                with col_add:
+                    st.write("#### Add alias")
+                    with st.form(f"add_alias_{attr['id']}"):
+                        add_alias_raw = st.text_input("New alias", key=f"add_alias_raw_{attr['id']}")
+                        add_alias_source = st.text_input("Source", value="manual", key=f"add_alias_source_{attr['id']}")
+                        add_alias_confidence = st.number_input(
+                            "Confidence",
+                            min_value=0.0,
+                            max_value=1.0,
+                            value=1.0,
+                            step=0.01,
+                            key=f"add_alias_confidence_{attr['id']}",
+                        )
+                        add_alias_approved = st.checkbox("Approved", value=True, key=f"add_alias_approved_{attr['id']}")
+                        add_alias_submit = st.form_submit_button("Add alias")
+                    if add_alias_submit:
+                        try:
+                            api_post(
+                                "/aliases",
+                                {
+                                    "canonical_id": attr["id"],
+                                    "alias_raw": add_alias_raw,
+                                    "source": add_alias_source or "manual",
+                                    "confidence": add_alias_confidence,
+                                    "approved": add_alias_approved,
+                                },
+                            )
+                            st.success("Alias added.")
+                            st.rerun()
+                        except Exception as exc:
+                            show_error(exc)
+
+                with col_manage:
+                    st.write("#### Edit / delete alias")
+                    if aliases_list:
+                        alias_options = {
+                            f"#{a['id']} | {a['alias_raw']} | norm: {a['alias_norm']}": a
+                            for a in aliases_list
+                        }
+                        selected_alias_label = st.selectbox(
+                            "Select alias",
+                            list(alias_options.keys()),
+                            key=f"select_alias_{attr['id']}",
+                        )
+                        selected_alias = alias_options[selected_alias_label]
+
+                        with st.form(f"edit_alias_{selected_alias['id']}"):
+                            alias_raw = st.text_input(
+                                "Alias raw",
+                                value=selected_alias.get("alias_raw") or "",
+                                key=f"alias_raw_{selected_alias['id']}",
+                            )
+                            alias_source = st.text_input(
+                                "Source",
+                                value=selected_alias.get("source") or "manual",
+                                key=f"alias_source_{selected_alias['id']}",
+                            )
+                            alias_confidence = st.number_input(
+                                "Confidence",
+                                min_value=0.0,
+                                max_value=1.0,
+                                value=float(selected_alias.get("confidence", 1.0)),
+                                step=0.01,
+                                key=f"alias_confidence_{selected_alias['id']}",
+                            )
+                            alias_approved = st.checkbox(
+                                "Approved",
+                                value=bool(selected_alias.get("approved")),
+                                key=f"alias_approved_{selected_alias['id']}",
+                            )
+                            save_alias = st.form_submit_button("Save alias changes")
+                        if save_alias:
+                            try:
+                                api_patch(
+                                    f"/aliases/{selected_alias['id']}",
+                                    {
+                                        "alias_raw": alias_raw,
+                                        "source": alias_source or "manual",
+                                        "confidence": alias_confidence,
+                                        "approved": alias_approved,
+                                    },
+                                )
+                                st.success("Alias updated.")
+                                st.rerun()
+                            except Exception as exc:
+                                show_error(exc)
+
+                        st.warning("Delete removes this alias permanently. Exact matching for that alias will stop working.")
+                        if st.button("Delete selected alias", key=f"delete_alias_{selected_alias['id']}"):
+                            try:
+                                api_delete(f"/aliases/{selected_alias['id']}", reindex=True)
+                                st.success("Alias deleted.")
+                                st.rerun()
+                            except Exception as exc:
+                                show_error(exc)
+                    else:
+                        st.info("No aliases yet. Add one from the left side.")
+
+                st.divider()
+                st.write("#### Deactivate")
+                st.caption("Deactivate hides this canonical from normal matching when active=True filters are used. It does not delete historical reviews/logs.")
+                if attr.get("active"):
+                    if st.button("Deactivate this canonical", key=f"deactivate_{attr['id']}"):
+                        try:
+                            api_delete(f"/canonical/{attr['id']}")
+                            st.success("Canonical deactivated.")
+                            st.rerun()
+                        except Exception as exc:
+                            show_error(exc)
+                else:
+                    st.info("This canonical is inactive. Turn on the Active checkbox and save to reactivate it.")
+
     except Exception as exc:
         show_error(exc)
 
@@ -349,7 +550,7 @@ with tools_tab:
             show_error(exc)
 
     st.divider()
-    st.write("Rebuild embeddings after bulk imports or config/model changes.")
+    st.write("Rebuild embeddings after bulk imports, alias edits, or config/model changes.")
     if st.button("Reindex all embeddings"):
         try:
             result = api_post("/embeddings/reindex")

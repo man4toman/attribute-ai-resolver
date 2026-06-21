@@ -6,9 +6,28 @@ from sqlalchemy.orm import Session, selectinload
 from app import models, schemas
 from app.db import get_db
 from app.normalizer import make_slug, normalize_sample_values, normalize_text
-from app.services import add_alias, create_canonical_attribute, get_canonical, reindex_canonical_attribute, unique_slug
+from app.services import add_alias, create_canonical_attribute, get_canonical, safe_reindex_canonical_attribute, unique_slug
 
 router = APIRouter(prefix="/canonical", tags=["canonical attributes"])
+
+
+def _slug_exists_for_other(db: Session, slug: str, canonical_id: int) -> bool:
+    return (
+        db.query(models.CanonicalAttribute)
+        .filter(models.CanonicalAttribute.slug == slug, models.CanonicalAttribute.id != canonical_id)
+        .first()
+        is not None
+    )
+
+
+def _unique_slug_for_update(db: Session, requested: str, canonical_id: int) -> str:
+    base = make_slug(requested)
+    slug = base
+    counter = 2
+    while _slug_exists_for_other(db, slug, canonical_id):
+        slug = f"{base}-{counter}"
+        counter += 1
+    return slug
 
 
 @router.post("", response_model=schemas.CanonicalOut)
@@ -37,12 +56,8 @@ def create_canonical(payload: schemas.CanonicalCreate, db: Session = Depends(get
         ) from exc
 
     if payload.reindex:
-        try:
-            reindex_canonical_attribute(db, attr.id)
-            db.commit()
-        except Exception:  # noqa: BLE001 - keep dashboard workflow alive
-            # Attribute and aliases were already saved. User can reindex later from Tools.
-            db.rollback()
+        # Reindex is secondary. Keep normal CRUD usable even if the model is not ready.
+        safe_reindex_canonical_attribute(db, attr.id)
 
     result = get_canonical(db, attr.id)
     if not result:
@@ -98,13 +113,27 @@ def update_canonical(canonical_id: int, payload: schemas.CanonicalUpdate, db: Se
         raise HTTPException(status_code=404, detail="Canonical attribute not found.")
 
     try:
-        if payload.name is not None and payload.name.strip() != attr.name:
-            attr.name = payload.name.strip()
-            add_alias(db, attr.id, payload.name, source="rename", confidence=1.0, approved=True, reindex=False)
+        if payload.name is not None:
+            cleaned_name = payload.name.strip()
+            if not cleaned_name:
+                raise HTTPException(status_code=400, detail="Canonical attribute name is required.")
+            if cleaned_name != attr.name:
+                existing = (
+                    db.query(models.CanonicalAttribute)
+                    .filter(models.CanonicalAttribute.name == cleaned_name, models.CanonicalAttribute.id != canonical_id)
+                    .first()
+                )
+                if existing:
+                    raise HTTPException(status_code=400, detail=f"Canonical attribute '{cleaned_name}' already exists.")
+                attr.name = cleaned_name
+                add_alias(db, attr.id, cleaned_name, source="rename", confidence=1.0, approved=True, reindex=False)
+
         if payload.slug is not None:
-            attr.slug = payload.slug or unique_slug(db, attr.name)
+            requested_slug = payload.slug.strip()
+            attr.slug = _unique_slug_for_update(requested_slug or attr.name, canonical_id)
         elif payload.name is not None:
-            attr.slug = make_slug(attr.name)
+            attr.slug = _unique_slug_for_update(attr.name, canonical_id)
+
         if payload.description is not None:
             attr.description = payload.description
         if payload.category_hint is not None:
@@ -114,10 +143,19 @@ def update_canonical(canonical_id: int, payload: schemas.CanonicalUpdate, db: Se
         if payload.active is not None:
             attr.active = payload.active
 
-        reindex_canonical_attribute(db, attr.id)
         db.commit()
-        db.refresh(attr)
-        return attr
+        attr_id = attr.id
+
+        # Embeddings are a secondary index. Editing should succeed even if local AI is unavailable.
+        safe_reindex_canonical_attribute(db, attr_id)
+
+        result = get_canonical(db, attr_id)
+        if not result:
+            raise HTTPException(status_code=500, detail="Canonical attribute was updated but could not be loaded.")
+        return result
+    except HTTPException:
+        db.rollback()
+        raise
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=400, detail=str(exc)) from exc

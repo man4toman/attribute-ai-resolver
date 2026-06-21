@@ -35,6 +35,7 @@ class CanonicalUpdate(BaseModel):
     category_hint: str | None = None
     sample_values: list[str] | None = None
     active: bool | None = None
+    reindex: bool = True
 
 
 class CanonicalOut(BaseModel):
@@ -56,6 +57,14 @@ class AliasCreate(BaseModel):
     source: str = "manual"
     confidence: float = 1.0
     approved: bool = True
+    reindex: bool = True
+
+
+class AliasUpdate(BaseModel):
+    alias_raw: str | None = Field(default=None, min_length=1, max_length=255)
+    source: str | None = None
+    confidence: float | None = None
+    approved: bool | None = None
     reindex: bool = True
 
 

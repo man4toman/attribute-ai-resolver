@@ -89,6 +89,10 @@ def create_canonical_attribute(
     if not cleaned_name:
         raise ValueError("Canonical attribute name is required.")
 
+    existing_name = db.query(models.CanonicalAttribute).filter(models.CanonicalAttribute.name == cleaned_name).first()
+    if existing_name:
+        raise ValueError(f"Canonical attribute '{cleaned_name}' already exists with id={existing_name.id}.")
+
     final_slug = slug or unique_slug(db, cleaned_name)
     if slug and db.query(models.CanonicalAttribute).filter(models.CanonicalAttribute.slug == slug).first():
         final_slug = unique_slug(db, slug)
