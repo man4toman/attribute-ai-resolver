@@ -35,6 +35,8 @@ services:
       - "8000:8000"
     volumes:
       - hf_cache:/root/.cache/huggingface
+      - ./backend/app:/app/app
+      - ./backend/scripts:/app/scripts
     depends_on:
       db:
         condition: service_healthy
@@ -46,6 +48,8 @@ services:
       API_BASE_URL: ${API_BASE_URL:-http://api:8000}
     ports:
       - "8501:8501"
+    volumes:
+      - ./dashboard/dashboard.py:/app/dashboard.py
     depends_on:
       - api
 

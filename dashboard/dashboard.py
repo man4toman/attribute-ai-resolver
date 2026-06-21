@@ -15,51 +15,97 @@ st.markdown(
     """
 <style>
 .block-container {
-    padding-top: 1.25rem;
+    padding-top: 1rem;
     padding-bottom: 2rem;
-    max-width: 1500px;
+    max-width: 1600px;
 }
 .main-title {
-    font-size: 2rem;
-    font-weight: 800;
+    font-size: 2.05rem;
+    font-weight: 900;
     margin: 0 0 .2rem 0;
+    letter-spacing: -.02em;
 }
 .subtle {
     color: #667085;
     font-size: .9rem;
 }
+.panel-title {
+    font-size: 1.15rem;
+    font-weight: 850;
+    margin: .2rem 0 .5rem 0;
+}
+.table-head {
+    background: #f8fafc;
+    border: 1px solid #e4e7ec;
+    border-radius: .65rem .65rem 0 0;
+    padding: .65rem .8rem;
+    color: #344054;
+    font-size: .82rem;
+    font-weight: 850;
+}
+.table-row {
+    border-left: 1px solid #e4e7ec;
+    border-right: 1px solid #e4e7ec;
+    border-bottom: 1px solid #e4e7ec;
+    padding: .55rem .8rem;
+    background: #ffffff;
+}
+.table-row:hover {
+    background: #fcfcfd;
+}
+.row-title {
+    font-weight: 850;
+    font-size: .98rem;
+    margin-bottom: .08rem;
+}
+.row-muted {
+    color: #667085;
+    font-size: .82rem;
+    line-height: 1.45;
+}
+.small-muted {
+    color: #667085;
+    font-size: .78rem;
+}
 .chip {
     display: inline-block;
     border-radius: 999px;
-    padding: .18rem .55rem;
-    font-size: .78rem;
-    font-weight: 700;
-    border: 1px solid rgba(0,0,0,.08);
+    padding: .18rem .58rem;
+    font-size: .76rem;
+    font-weight: 800;
+    border: 1px solid rgba(0,0,0,.06);
+    white-space: nowrap;
 }
 .chip-active { background: #ecfdf3; color: #027a48; }
 .chip-inactive { background: #f2f4f7; color: #344054; }
 .chip-open { background: #eff8ff; color: #175cd3; }
 .chip-approved { background: #ecfdf3; color: #027a48; }
 .chip-ignored { background: #fff6ed; color: #c4320a; }
-.row-title {
-    font-weight: 750;
-    font-size: 1.03rem;
-    margin-bottom: .1rem;
+.inline-panel {
+    background: #fcfcfd;
+    border: 1px solid #d0d5dd;
+    border-radius: .75rem;
+    padding: .9rem .95rem .95rem .95rem;
+    margin-top: .55rem;
 }
-.row-muted {
-    color: #667085;
-    font-size: .84rem;
-    line-height: 1.5;
+.danger-box {
+    background: #fff1f3;
+    border: 1px solid #fecdca;
+    border-radius: .75rem;
+    padding: .85rem .95rem;
 }
-.section-title {
-    font-weight: 800;
-    font-size: 1.08rem;
-    margin: .25rem 0 .5rem 0;
+.alias-box {
+    background: #ffffff;
+    border: 1px solid #e4e7ec;
+    border-radius: .65rem;
+    padding: .55rem .7rem;
+    margin-bottom: .35rem;
 }
-hr { margin-top: .8rem; margin-bottom: .8rem; }
 .stButton>button {
     border-radius: .55rem;
+    min-height: 2.25rem;
 }
+hr { margin-top: .7rem; margin-bottom: .7rem; }
 </style>
 """,
     unsafe_allow_html=True,
@@ -67,7 +113,7 @@ hr { margin-top: .8rem; margin-bottom: .8rem; }
 
 st.markdown('<div class="main-title">Attribute AI Resolver</div>', unsafe_allow_html=True)
 st.markdown(
-    f'<div class="subtle">API connection: <code>{escape(API_BASE_URL)}</code> | Browser docs: <code>http://localhost:8000/docs</code></div>',
+    f'<div class="subtle">Version: <b>v1.5-table-ui</b> | API: <code>{escape(API_BASE_URL)}</code> | Docs: <code>http://localhost:8000/docs</code></div>',
     unsafe_allow_html=True,
 )
 
@@ -126,7 +172,7 @@ def join_values(values: list[Any] | None) -> str:
     return ", ".join(str(item) for item in (values or []) if str(item).strip())
 
 
-def alias_summary(attr: dict, limit: int = 6) -> str:
+def alias_summary(attr: dict, limit: int = 7) -> str:
     aliases = [a.get("alias_raw", "") for a in attr.get("aliases", []) if a.get("alias_raw")]
     if not aliases:
         return "-"
@@ -155,51 +201,68 @@ def reset_page_on_filter_change(page_key: str, signature: tuple[Any, ...]) -> No
         st.session_state[page_key] = 1
 
 
-def get_current_page(page_key: str, total: int, page_size: int) -> tuple[int, int]:
-    total_pages = max(1, math.ceil(total / page_size)) if total else 1
-    page = int(st.session_state.get(page_key, 1) or 1)
-    page = min(max(page, 1), total_pages)
-    st.session_state[page_key] = page
-    return page, total_pages
-
-
-def render_pagination(page_key: str, total: int, page_size: int, prefix: str) -> tuple[int, int]:
-    page, total_pages = get_current_page(page_key, total, page_size)
-    start = 0 if total == 0 else (page - 1) * page_size + 1
-    end = min(total, page * page_size)
-
-    col_first, col_prev, col_info, col_next, col_last = st.columns([1, 1, 2.5, 1, 1])
-    with col_first:
-        if st.button("اول", key=f"{prefix}_first", disabled=page <= 1):
-            st.session_state[page_key] = 1
-            st.rerun()
-    with col_prev:
-        if st.button("قبلی", key=f"{prefix}_prev", disabled=page <= 1):
-            st.session_state[page_key] = page - 1
-            st.rerun()
-    with col_info:
-        st.markdown(
-            f"<div class='row-muted' style='text-align:center;padding-top:.45rem'>صفحه <b>{page}</b> از <b>{total_pages}</b> — نمایش {start} تا {end} از {total}</div>",
-            unsafe_allow_html=True,
-        )
-    with col_next:
-        if st.button("بعدی", key=f"{prefix}_next", disabled=page >= total_pages):
-            st.session_state[page_key] = page + 1
-            st.rerun()
-    with col_last:
-        if st.button("آخر", key=f"{prefix}_last", disabled=page >= total_pages):
-            st.session_state[page_key] = total_pages
-            st.rerun()
-
-    return page, total_pages
-
-
 def active_filter_to_params(value: str) -> dict[str, Any]:
     if value == "active":
         return {"active": True, "include_inactive": False}
     if value == "inactive":
         return {"active": False, "include_inactive": False}
     return {"active": None, "include_inactive": True}
+
+
+def clamp_page(page: int, total_pages: int) -> int:
+    return min(max(int(page or 1), 1), max(total_pages, 1))
+
+
+def render_pager(page_key: str, total: int, page_size: int, prefix: str, compact: bool = False) -> int:
+    total_pages = max(1, math.ceil(total / page_size)) if total else 1
+    page = clamp_page(st.session_state.get(page_key, 1), total_pages)
+    st.session_state[page_key] = page
+    input_key = f"{prefix}_page_input"
+    if st.session_state.get(input_key) != page:
+        st.session_state[input_key] = page
+    start = 0 if total == 0 else (page - 1) * page_size + 1
+    end = min(total, page * page_size)
+
+    widths = [0.8, 0.9, 1.5, 2.2, 0.9, 0.8] if not compact else [1, 1, 2, 1, 1]
+    if compact:
+        c_prev, c_page, c_info, c_next, c_last = st.columns(widths)
+    else:
+        c_first, c_prev, c_page, c_info, c_next, c_last = st.columns(widths)
+        with c_first:
+            if st.button("اول", key=f"{prefix}_first", disabled=page <= 1):
+                st.session_state[page_key] = 1
+                st.rerun()
+
+    with c_prev:
+        if st.button("قبلی", key=f"{prefix}_prev", disabled=page <= 1):
+            st.session_state[page_key] = page - 1
+            st.rerun()
+    with c_page:
+        requested_page = st.number_input(
+            "صفحه",
+            min_value=1,
+            max_value=total_pages,
+            value=page,
+            step=1,
+            key=input_key,
+        )
+        if int(requested_page) != page:
+            st.session_state[page_key] = int(requested_page)
+            st.rerun()
+    with c_info:
+        st.markdown(
+            f"<div class='row-muted' style='padding-top:1.75rem'>نمایش <b>{start}</b> تا <b>{end}</b> از <b>{total}</b> — صفحه <b>{page}</b> از <b>{total_pages}</b></div>",
+            unsafe_allow_html=True,
+        )
+    with c_next:
+        if st.button("بعدی", key=f"{prefix}_next", disabled=page >= total_pages):
+            st.session_state[page_key] = page + 1
+            st.rerun()
+    with c_last:
+        if st.button("آخر", key=f"{prefix}_last", disabled=page >= total_pages):
+            st.session_state[page_key] = total_pages
+            st.rerun()
+    return page
 
 
 def create_starter_attributes() -> tuple[int, list[str]]:
@@ -268,15 +331,28 @@ except Exception as exc:
 
 
 # -----------------------------
-# Renderers
+# Attribute table/editor
 # -----------------------------
-def render_alias_inline_editor(alias: dict) -> None:
+def set_attr_action(attr_id: int | None, action: str | None) -> None:
+    st.session_state.attr_action_id = attr_id
+    st.session_state.attr_action = action
+    st.session_state.editing_alias_id = None
+
+
+def current_attr_action(attr_id: int) -> str | None:
+    if st.session_state.get("attr_action_id") == attr_id:
+        return st.session_state.get("attr_action")
+    return None
+
+
+def render_alias_editor(alias: dict) -> None:
     alias_id = alias["id"]
-    st.markdown("<div class='section-title'>ویرایش alias</div>", unsafe_allow_html=True)
+    st.markdown("<div class='inline-panel'>", unsafe_allow_html=True)
+    st.markdown("<div class='panel-title'>ویرایش alias</div>", unsafe_allow_html=True)
     with st.form(f"edit_alias_form_{alias_id}"):
-        c1, c2, c3, c4 = st.columns([3, 1.4, 1, 1])
+        c1, c2, c3, c4 = st.columns([3, 1.5, 1, 1])
         with c1:
-            alias_raw = st.text_input("Alias text", value=alias.get("alias_raw", ""), key=f"alias_raw_{alias_id}")
+            alias_raw = st.text_input("متن alias", value=alias.get("alias_raw", ""), key=f"alias_raw_{alias_id}")
         with c2:
             source = st.text_input("Source", value=alias.get("source", "manual"), key=f"alias_source_{alias_id}")
         with c3:
@@ -290,14 +366,8 @@ def render_alias_inline_editor(alias: dict) -> None:
             )
         with c4:
             approved = st.checkbox("Approved", value=bool(alias.get("approved", True)), key=f"alias_approved_{alias_id}")
-
-        confirm_delete = st.checkbox("حذف این alias را تأیید می‌کنم", key=f"confirm_delete_alias_{alias_id}")
-        save_col, cancel_col, delete_col = st.columns([1.2, 1.2, 1.2])
-        save_alias = save_col.form_submit_button("ذخیره alias", type="primary")
-        close_alias = cancel_col.form_submit_button("بستن")
-        delete_alias = delete_col.form_submit_button("حذف alias")
-
-        if save_alias:
+        c_save, c_close = st.columns([1, 1])
+        if c_save.form_submit_button("ذخیره alias", type="primary"):
             try:
                 api_patch(
                     f"/aliases/{alias_id}",
@@ -310,126 +380,27 @@ def render_alias_inline_editor(alias: dict) -> None:
                     },
                 )
                 st.session_state.editing_alias_id = None
-                st.success("Alias updated.")
+                st.success("Alias ذخیره شد.")
                 st.rerun()
             except Exception as exc:
                 show_error(exc)
-
-        if close_alias:
+        if c_close.form_submit_button("بستن"):
             st.session_state.editing_alias_id = None
             st.rerun()
-
-        if delete_alias:
-            if not confirm_delete:
-                st.warning("برای حذف، اول checkbox تأیید حذف را فعال کن.")
-            else:
-                try:
-                    api_delete(f"/aliases/{alias_id}", reindex=True)
-                    st.session_state.editing_alias_id = None
-                    st.success("Alias deleted.")
-                    st.rerun()
-                except Exception as exc:
-                    show_error(exc)
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
-def render_attribute_edit_panel(attr: dict) -> None:
+def render_alias_manager(attr: dict) -> None:
     attr_id = attr["id"]
-    st.divider()
-    st.markdown(f"<div class='section-title'>ویرایش اتریبیوت #{attr_id}</div>", unsafe_allow_html=True)
-
-    with st.form(f"edit_attr_form_{attr_id}"):
-        c1, c2, c3 = st.columns([2, 2, 1])
-        with c1:
-            name = st.text_input("Name", value=attr.get("name", ""), key=f"attr_name_{attr_id}")
-            category_hint = st.text_input(
-                "Category hint",
-                value=attr.get("category_hint") or "",
-                key=f"attr_category_{attr_id}",
-            )
-        with c2:
-            slug = st.text_input("Slug", value=attr.get("slug", ""), key=f"attr_slug_{attr_id}")
-            sample_values = st.text_input(
-                "Sample values, comma separated",
-                value=join_values(attr.get("sample_values", [])),
-                key=f"attr_samples_{attr_id}",
-            )
-        with c3:
-            active = st.checkbox("Active", value=bool(attr.get("active", True)), key=f"attr_active_{attr_id}")
-
-        description = st.text_area(
-            "Description",
-            value=attr.get("description") or "",
-            height=90,
-            key=f"attr_description_{attr_id}",
-        )
-
-        save_col, close_col = st.columns([1, 1])
-        save_attr = save_col.form_submit_button("ذخیره تغییرات", type="primary")
-        close_attr = close_col.form_submit_button("بستن ویرایش")
-
-        if save_attr:
-            try:
-                api_patch(
-                    f"/canonical/{attr_id}",
-                    {
-                        "name": name,
-                        "slug": slug,
-                        "description": description,
-                        "category_hint": category_hint,
-                        "sample_values": split_csv(sample_values),
-                        "active": active,
-                    },
-                )
-                st.success("Attribute updated.")
-                st.rerun()
-            except Exception as exc:
-                show_error(exc)
-
-        if close_attr:
-            st.session_state.editing_attr_id = None
-            st.session_state.editing_alias_id = None
-            st.rerun()
-
-    action_col1, action_col2, action_col3 = st.columns([1.3, 1.3, 3])
-    with action_col1:
-        if st.button("Reindex", key=f"reindex_attr_{attr_id}"):
-            try:
-                result = api_post(f"/embeddings/reindex/{attr_id}")
-                if result.get("warning"):
-                    st.warning(result)
-                else:
-                    st.success(result)
-            except Exception as exc:
-                show_error(exc)
-    with action_col2:
-        if attr.get("active", True):
-            if st.button("غیرفعال‌سازی", key=f"deactivate_attr_{attr_id}"):
-                try:
-                    api_delete(f"/canonical/{attr_id}")
-                    st.session_state.editing_attr_id = None
-                    st.success("Attribute deactivated.")
-                    st.rerun()
-                except Exception as exc:
-                    show_error(exc)
-        else:
-            if st.button("فعال‌سازی", key=f"reactivate_attr_{attr_id}"):
-                try:
-                    api_patch(f"/canonical/{attr_id}", {"active": True})
-                    st.success("Attribute reactivated.")
-                    st.rerun()
-                except Exception as exc:
-                    show_error(exc)
-
-    st.divider()
-    st.markdown("<div class='section-title'>Aliasها</div>", unsafe_allow_html=True)
+    st.markdown("<div class='panel-title'>Aliasها</div>", unsafe_allow_html=True)
 
     with st.form(f"add_alias_form_{attr_id}", clear_on_submit=True):
-        a1, a2, a3, a4 = st.columns([3, 1.4, 1, 1])
-        with a1:
+        c1, c2, c3, c4, c5 = st.columns([3, 1.35, 1, 1, 1.2])
+        with c1:
             alias_raw = st.text_input("Alias جدید", key=f"new_alias_raw_{attr_id}")
-        with a2:
+        with c2:
             source = st.text_input("Source", value="manual", key=f"new_alias_source_{attr_id}")
-        with a3:
+        with c3:
             confidence = st.number_input(
                 "Confidence",
                 min_value=0.0,
@@ -438,9 +409,11 @@ def render_attribute_edit_panel(attr: dict) -> None:
                 step=0.01,
                 key=f"new_alias_conf_{attr_id}",
             )
-        with a4:
+        with c4:
             approved = st.checkbox("Approved", value=True, key=f"new_alias_approved_{attr_id}")
-        add_alias = st.form_submit_button("افزودن alias", type="primary")
+        with c5:
+            st.write("")
+            add_alias = st.form_submit_button("افزودن", type="primary")
         if add_alias:
             try:
                 api_post(
@@ -454,7 +427,7 @@ def render_attribute_edit_panel(attr: dict) -> None:
                         "reindex": True,
                     },
                 )
-                st.success("Alias added.")
+                st.success("Alias اضافه شد.")
                 st.rerun()
             except Exception as exc:
                 show_error(exc)
@@ -462,71 +435,253 @@ def render_attribute_edit_panel(attr: dict) -> None:
     aliases = attr.get("aliases", [])
     if not aliases:
         st.info("هنوز alias ندارد.")
-    else:
-        for alias in aliases:
-            alias_id = alias["id"]
-            is_editing_alias = st.session_state.get("editing_alias_id") == alias_id
-            with st.container(border=True):
-                c1, c2, c3, c4, c5 = st.columns([3, 2.4, 1.4, 1.2, 1])
-                with c1:
-                    st.markdown(f"<div class='row-title'>{escape(alias.get('alias_raw', ''))}</div>", unsafe_allow_html=True)
-                    st.markdown(f"<div class='row-muted'>norm: {escape(alias.get('alias_norm', ''))}</div>", unsafe_allow_html=True)
-                with c2:
-                    st.markdown(f"<div class='row-muted'>source: {escape(alias.get('source', ''))}</div>", unsafe_allow_html=True)
-                with c3:
-                    st.markdown(f"<div class='row-muted'>confidence: {float(alias.get('confidence', 0)):.2f}</div>", unsafe_allow_html=True)
-                with c4:
-                    kind = "active" if alias.get("approved", True) else "inactive"
-                    label = "approved" if alias.get("approved", True) else "not approved"
-                    st.markdown(status_chip(label, kind), unsafe_allow_html=True)
-                with c5:
-                    button_label = "بستن" if is_editing_alias else "ویرایش"
-                    if st.button(button_label, key=f"edit_alias_btn_{alias_id}", type="primary" if is_editing_alias else "secondary"):
-                        st.session_state.editing_alias_id = None if is_editing_alias else alias_id
-                        st.rerun()
+        return
 
-                if is_editing_alias:
-                    render_alias_inline_editor(alias)
+    h1, h2, h3, h4, h5 = st.columns([3.0, 2.1, 1.1, 1.2, 1.7])
+    h1.markdown("<div class='small-muted'><b>Alias</b></div>", unsafe_allow_html=True)
+    h2.markdown("<div class='small-muted'><b>Normalized</b></div>", unsafe_allow_html=True)
+    h3.markdown("<div class='small-muted'><b>Confidence</b></div>", unsafe_allow_html=True)
+    h4.markdown("<div class='small-muted'><b>Status</b></div>", unsafe_allow_html=True)
+    h5.markdown("<div class='small-muted'><b>عملیات</b></div>", unsafe_allow_html=True)
 
-
-def render_attribute_row(attr: dict) -> None:
-    attr_id = attr["id"]
-    is_editing = st.session_state.get("editing_attr_id") == attr_id
-
-    with st.container(border=True):
-        c1, c2, c3, c4, c5, c6 = st.columns([0.7, 2.4, 1.5, 1.1, 3.2, 1.2])
+    for alias in aliases:
+        alias_id = alias["id"]
+        c1, c2, c3, c4, c5 = st.columns([3.0, 2.1, 1.1, 1.2, 1.7])
         with c1:
-            st.markdown(f"<div class='row-muted'>ID</div><div class='row-title'>#{attr_id}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='alias-box'><b>{escape(alias.get('alias_raw', ''))}</b><br><span class='small-muted'>source: {escape(alias.get('source', ''))}</span></div>", unsafe_allow_html=True)
         with c2:
-            st.markdown(f"<div class='row-title'>{escape(attr.get('name', ''))}</div>", unsafe_allow_html=True)
-            st.markdown(f"<div class='row-muted'>category: {escape(attr.get('category_hint') or '-')}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='alias-box'>{escape(alias.get('alias_norm', '-'))}</div>", unsafe_allow_html=True)
         with c3:
-            st.markdown(f"<div class='row-muted'>slug</div><div>{escape(attr.get('slug', '-'))}</div>", unsafe_allow_html=True)
+            st.markdown(f"<div class='alias-box'>{float(alias.get('confidence', 0)):.2f}</div>", unsafe_allow_html=True)
         with c4:
-            kind = "active" if attr.get("active", True) else "inactive"
-            label = "active" if attr.get("active", True) else "inactive"
-            st.markdown(status_chip(label, kind), unsafe_allow_html=True)
+            kind = "active" if alias.get("approved", True) else "inactive"
+            label = "approved" if alias.get("approved", True) else "pending"
+            st.markdown(f"<div class='alias-box'>{status_chip(label, kind)}</div>", unsafe_allow_html=True)
         with c5:
-            st.markdown(f"<div class='row-muted'>aliases</div><div>{escape(alias_summary(attr, limit=8))}</div>", unsafe_allow_html=True)
-            sample = join_values(attr.get("sample_values", [])) or "-"
-            st.markdown(f"<div class='row-muted'>samples: {escape(sample)}</div>", unsafe_allow_html=True)
-        with c6:
-            label = "بستن" if is_editing else "ویرایش"
-            if st.button(label, key=f"edit_attr_btn_{attr_id}", type="primary" if is_editing else "secondary"):
-                st.session_state.editing_attr_id = None if is_editing else attr_id
-                st.session_state.editing_alias_id = None
+            b1, b2 = st.columns([1, 1])
+            if b1.button("ویرایش", key=f"alias_edit_{alias_id}"):
+                st.session_state.editing_alias_id = alias_id
+                st.rerun()
+            if b2.button("حذف", key=f"alias_delete_{alias_id}"):
+                st.session_state.editing_alias_id = f"delete_{alias_id}"
                 st.rerun()
 
-        if is_editing:
-            render_attribute_edit_panel(attr)
+        if st.session_state.get("editing_alias_id") == alias_id:
+            render_alias_editor(alias)
+        elif st.session_state.get("editing_alias_id") == f"delete_{alias_id}":
+            st.markdown("<div class='danger-box'>", unsafe_allow_html=True)
+            st.warning(f"حذف alias: {alias.get('alias_raw')}")
+            confirm = st.checkbox("حذف این alias را تأیید می‌کنم", key=f"confirm_alias_delete_{alias_id}")
+            d1, d2 = st.columns([1, 1])
+            if d1.button("حذف alias", key=f"do_alias_delete_{alias_id}", type="primary"):
+                if not confirm:
+                    st.warning("اول تیک تأیید حذف را بزن.")
+                else:
+                    try:
+                        api_delete(f"/aliases/{alias_id}", reindex=True)
+                        st.session_state.editing_alias_id = None
+                        st.success("Alias حذف شد.")
+                        st.rerun()
+                    except Exception as exc:
+                        show_error(exc)
+            if d2.button("انصراف", key=f"cancel_alias_delete_{alias_id}"):
+                st.session_state.editing_alias_id = None
+                st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
 
 
+def render_attribute_edit_panel(attr: dict) -> None:
+    attr_id = attr["id"]
+    st.markdown("<div class='inline-panel'>", unsafe_allow_html=True)
+    st.markdown(f"<div class='panel-title'>ویرایش اتریبیوت #{attr_id}</div>", unsafe_allow_html=True)
+
+    with st.form(f"edit_attr_form_{attr_id}"):
+        c1, c2, c3 = st.columns([2, 2, 1])
+        with c1:
+            name = st.text_input("نام", value=attr.get("name", ""), key=f"attr_name_{attr_id}")
+            category_hint = st.text_input(
+                "Category hint",
+                value=attr.get("category_hint") or "",
+                key=f"attr_category_{attr_id}",
+            )
+        with c2:
+            slug = st.text_input("Slug", value=attr.get("slug", ""), key=f"attr_slug_{attr_id}")
+            sample_values = st.text_input(
+                "Sample values با کاما",
+                value=join_values(attr.get("sample_values", [])),
+                key=f"attr_samples_{attr_id}",
+            )
+        with c3:
+            active = st.checkbox("فعال", value=bool(attr.get("active", True)), key=f"attr_active_{attr_id}")
+            st.caption("حذف امن یعنی غیرفعال‌سازی؛ اطلاعات و aliasها حفظ می‌شوند.")
+
+        description = st.text_area(
+            "Description",
+            value=attr.get("description") or "",
+            height=90,
+            key=f"attr_description_{attr_id}",
+        )
+
+        save_col, close_col = st.columns([1, 1])
+        if save_col.form_submit_button("ذخیره تغییرات", type="primary"):
+            try:
+                api_patch(
+                    f"/canonical/{attr_id}",
+                    {
+                        "name": name,
+                        "slug": slug,
+                        "description": description,
+                        "category_hint": category_hint,
+                        "sample_values": split_csv(sample_values),
+                        "active": active,
+                    },
+                )
+                st.success("تغییرات ذخیره شد.")
+                st.rerun()
+            except Exception as exc:
+                show_error(exc)
+
+        if close_col.form_submit_button("بستن"):
+            set_attr_action(None, None)
+            st.rerun()
+
+    a1, a2, a3 = st.columns([1, 1, 4])
+    with a1:
+        if st.button("Reindex", key=f"reindex_attr_{attr_id}"):
+            try:
+                result = api_post(f"/embeddings/reindex/{attr_id}")
+                if result.get("warning"):
+                    st.warning(result)
+                else:
+                    st.success(result)
+            except Exception as exc:
+                show_error(exc)
+    with a2:
+        label = "غیرفعال‌سازی" if attr.get("active", True) else "فعال‌سازی"
+        if st.button(label, key=f"toggle_active_{attr_id}"):
+            try:
+                if attr.get("active", True):
+                    api_delete(f"/canonical/{attr_id}")
+                else:
+                    api_patch(f"/canonical/{attr_id}", {"active": True})
+                st.success("وضعیت تغییر کرد.")
+                st.rerun()
+            except Exception as exc:
+                show_error(exc)
+
+    st.divider()
+    render_alias_manager(attr)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def render_attribute_delete_panel(attr: dict) -> None:
+    attr_id = attr["id"]
+    st.markdown("<div class='danger-box'>", unsafe_allow_html=True)
+    st.markdown(f"<div class='panel-title'>حذف/غیرفعال‌سازی اتریبیوت #{attr_id}</div>", unsafe_allow_html=True)
+    if attr.get("active", True):
+        st.warning(
+            "برای حفظ لاگ‌ها و جلوگیری از خراب شدن reviewهای قبلی، حذف از پنل به صورت غیرفعال‌سازی انجام می‌شود. "
+            "بعد از غیرفعال شدن، این attribute در matchهای active استفاده نمی‌شود."
+        )
+        confirm = st.checkbox(f"غیرفعال‌سازی «{attr.get('name')}» را تأیید می‌کنم", key=f"confirm_deactivate_{attr_id}")
+        d1, d2 = st.columns([1, 1])
+        if d1.button("حذف/غیرفعال‌سازی", key=f"do_deactivate_{attr_id}", type="primary"):
+            if not confirm:
+                st.warning("اول تیک تأیید را بزن.")
+            else:
+                try:
+                    api_delete(f"/canonical/{attr_id}")
+                    set_attr_action(None, None)
+                    st.success("اتریبیوت غیرفعال شد.")
+                    st.rerun()
+                except Exception as exc:
+                    show_error(exc)
+        if d2.button("انصراف", key=f"cancel_deactivate_{attr_id}"):
+            set_attr_action(None, None)
+            st.rerun()
+    else:
+        st.info("این attribute از قبل inactive است.")
+        r1, r2 = st.columns([1, 1])
+        if r1.button("فعال‌سازی دوباره", key=f"reactivate_from_delete_{attr_id}", type="primary"):
+            try:
+                api_patch(f"/canonical/{attr_id}", {"active": True})
+                set_attr_action(None, None)
+                st.success("فعال شد.")
+                st.rerun()
+            except Exception as exc:
+                show_error(exc)
+        if r2.button("بستن", key=f"close_delete_{attr_id}"):
+            set_attr_action(None, None)
+            st.rerun()
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def render_attribute_table_header() -> None:
+    st.markdown("<div class='table-head'>", unsafe_allow_html=True)
+    h1, h2, h3, h4, h5, h6 = st.columns([0.7, 2.1, 1.35, 3.0, 1.0, 1.8])
+    h1.markdown("ID")
+    h2.markdown("نام")
+    h3.markdown("Slug")
+    h4.markdown("Alias / Sample")
+    h5.markdown("وضعیت")
+    h6.markdown("عملیات")
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+def render_attribute_table_row(attr: dict) -> None:
+    attr_id = attr["id"]
+    action = current_attr_action(attr_id)
+
+    st.markdown("<div class='table-row'>", unsafe_allow_html=True)
+    c1, c2, c3, c4, c5, c6 = st.columns([0.7, 2.1, 1.35, 3.0, 1.0, 1.8])
+    with c1:
+        st.markdown(f"<div class='row-title'>#{attr_id}</div>", unsafe_allow_html=True)
+    with c2:
+        st.markdown(f"<div class='row-title'>{escape(attr.get('name', ''))}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='row-muted'>{escape(attr.get('category_hint') or '-')}</div>", unsafe_allow_html=True)
+    with c3:
+        st.markdown(f"<div class='row-muted'>{escape(attr.get('slug') or '-')}</div>", unsafe_allow_html=True)
+    with c4:
+        st.markdown(f"<div class='row-muted'><b>aliases:</b> {escape(alias_summary(attr, limit=6))}</div>", unsafe_allow_html=True)
+        samples = join_values(attr.get("sample_values", [])) or "-"
+        st.markdown(f"<div class='row-muted'><b>samples:</b> {escape(samples)}</div>", unsafe_allow_html=True)
+    with c5:
+        kind = "active" if attr.get("active", True) else "inactive"
+        label = "active" if attr.get("active", True) else "inactive"
+        st.markdown(status_chip(label, kind), unsafe_allow_html=True)
+    with c6:
+        e1, e2 = st.columns([1, 1])
+        edit_label = "بستن" if action == "edit" else "ویرایش"
+        if e1.button(edit_label, key=f"table_edit_attr_{attr_id}", type="primary" if action == "edit" else "secondary"):
+            if action == "edit":
+                set_attr_action(None, None)
+            else:
+                set_attr_action(attr_id, "edit")
+            st.rerun()
+        delete_label = "بستن" if action == "delete" else "حذف"
+        if e2.button(delete_label, key=f"table_delete_attr_{attr_id}"):
+            if action == "delete":
+                set_attr_action(None, None)
+            else:
+                set_attr_action(attr_id, "delete")
+            st.rerun()
+
+    if action == "edit":
+        render_attribute_edit_panel(attr)
+    elif action == "delete":
+        render_attribute_delete_panel(attr)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+
+# -----------------------------
+# Review renderers
+# -----------------------------
 def render_review_panel(item: dict) -> None:
     review_id = item["id"]
     st.divider()
     left, right = st.columns([1, 1])
     with left:
-        st.markdown("<div class='section-title'>Input</div>", unsafe_allow_html=True)
+        st.markdown("<div class='panel-title'>Input</div>", unsafe_allow_html=True)
         st.json(
             {
                 "raw": item.get("input_raw"),
@@ -537,7 +692,7 @@ def render_review_panel(item: dict) -> None:
         )
     with right:
         candidates = item.get("candidates_snapshot") or []
-        st.markdown("<div class='section-title'>Semantic candidates</div>", unsafe_allow_html=True)
+        st.markdown("<div class='panel-title'>Semantic candidates</div>", unsafe_allow_html=True)
         if candidates:
             st.dataframe(pd.DataFrame(candidates), use_container_width=True, hide_index=True)
         else:
@@ -547,7 +702,7 @@ def render_review_panel(item: dict) -> None:
         st.info(f"این آیتم قبلاً با وضعیت {item['status']} بسته شده است.")
         return
 
-    st.markdown("<div class='section-title'>تأیید به عنوان اتریبیوت موجود</div>", unsafe_allow_html=True)
+    st.markdown("<div class='panel-title'>تأیید به عنوان اتریبیوت موجود</div>", unsafe_allow_html=True)
     candidates = item.get("candidates_snapshot") or []
     if candidates:
         cols = st.columns(min(len(candidates), 4))
@@ -571,7 +726,7 @@ def render_review_panel(item: dict) -> None:
     else:
         st.caption("کاندید پیشنهادی وجود ندارد؛ از جستجوی دستی استفاده کن.")
 
-    st.markdown("<div class='section-title'>جستجوی دستی attribute موجود</div>", unsafe_allow_html=True)
+    st.markdown("<div class='panel-title'>جستجوی دستی attribute موجود</div>", unsafe_allow_html=True)
     manual_q = st.text_input(
         "Search existing canonical by name or alias",
         value=item.get("input_raw", ""),
@@ -614,7 +769,7 @@ def render_review_panel(item: dict) -> None:
         st.info("attribute موجودی پیدا نشد. اگر واقعاً جدید است، از بخش زیر بساز.")
 
     st.divider()
-    st.markdown("<div class='section-title'>ساخت canonical جدید از این review</div>", unsafe_allow_html=True)
+    st.markdown("<div class='panel-title'>ساخت canonical جدید از این review</div>", unsafe_allow_html=True)
     with st.form(f"create_new_from_review_{review_id}"):
         c1, c2 = st.columns(2)
         with c1:
@@ -722,7 +877,7 @@ with resolve_tab:
 
     result = st.session_state.get("last_resolve_result")
     if result:
-        st.markdown("<div class='section-title'>Result</div>", unsafe_allow_html=True)
+        st.markdown("<div class='panel-title'>Result</div>", unsafe_allow_html=True)
         c1, c2, c3, c4 = st.columns(4)
         c1.metric("Decision", result.get("decision", "-"))
         c2.metric("Method", result.get("method", "-"))
@@ -740,7 +895,7 @@ with review_tab:
 
     f1, f2, f3 = st.columns([1.2, 1.2, 3])
     with f1:
-        status = st.selectbox("Status", ["open", "approved", "ignored"], index=0)
+        status = st.selectbox("Status", ["open", "approved", "ignored", "all"], index=0)
     with f2:
         review_page_size = int(st.selectbox("Items per page", [5, 10, 20, 50, 100], index=1, key="review_page_size"))
     with f3:
@@ -750,8 +905,9 @@ with review_tab:
     reset_page_on_filter_change("review_page", (status, review_page_size))
 
     try:
+        # Use the page endpoint when available.
         total_reviews = int(api_get("/review/count", status=status).get("total", 0))
-        review_page, _ = render_pagination("review_page", total_reviews, review_page_size, "reviews")
+        review_page = render_pager("review_page", total_reviews, review_page_size, "reviews")
         review_offset = (review_page - 1) * review_page_size
         reviews = api_get("/review", status=status, limit=review_page_size, offset=review_offset)
 
@@ -765,62 +921,122 @@ with review_tab:
 
 with attributes_tab:
     st.subheader("Canonical attributes")
-    st.caption("لیست صفحه‌بندی‌شده، ویرایش inline، مدیریت aliasها و فعال/غیرفعال‌سازی.")
+    st.caption("جدول اصلی attributes؛ روی همان ردیف دکمه ویرایش یا حذف بزن، فرم عملیات همان‌جا باز می‌شود.")
 
-    with st.expander("ساخت attribute جدید", expanded=False):
+    top_actions = st.columns([1.1, 1.1, 4])
+    with top_actions[0]:
+        if st.button("+ ساخت attribute جدید", type="primary"):
+            if st.session_state.get("show_create_attr"):
+                st.session_state.show_create_attr = False
+            else:
+                st.session_state.show_create_attr = True
+                set_attr_action(None, None)
+            st.rerun()
+    with top_actions[1]:
+        if st.button("Refresh list"):
+            st.rerun()
+
+    if st.session_state.get("show_create_attr"):
+        st.markdown("<div class='inline-panel'>", unsafe_allow_html=True)
+        st.markdown("<div class='panel-title'>ساخت attribute جدید</div>", unsafe_allow_html=True)
         with st.form("create_attribute_form"):
             c1, c2 = st.columns(2)
             with c1:
                 name = st.text_input("Name")
                 slug = st.text_input("Slug optional")
-            with c2:
                 category_hint = st.text_input("Category hint optional")
+            with c2:
+                aliases = st.text_area("Aliases, comma/new-line separated", height=95)
                 sample_values = st.text_input("Sample values, comma separated")
-            aliases = st.text_input("Aliases, comma separated")
-            create_attr = st.form_submit_button("Create attribute", type="primary")
+            create_c, close_c = st.columns([1, 1])
+            create_attr = create_c.form_submit_button("Create attribute", type="primary")
+            close_create = close_c.form_submit_button("بستن")
 
         if create_attr:
             try:
+                alias_text = aliases.replace("\n", ",")
                 result = api_post(
                     "/canonical",
                     {
                         "name": name,
                         "slug": slug or None,
                         "category_hint": category_hint,
-                        "aliases": split_csv(aliases),
+                        "aliases": split_csv(alias_text),
                         "sample_values": split_csv(sample_values),
                     },
                 )
+                st.session_state.show_create_attr = False
                 st.success(f"Created canonical attribute #{result['id']}")
                 st.rerun()
             except Exception as exc:
                 show_error(exc)
+        if close_create:
+            st.session_state.show_create_attr = False
+            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    f1, f2, f3, f4 = st.columns([2.2, 1.2, 1.2, 1])
+    st.divider()
+    f1, f2, f3 = st.columns([2.4, 1.2, 1.2])
     with f1:
-        q = st.text_input("جستجو در name / slug / alias", value="")
+        q = st.text_input("جستجو در name / slug / alias", value="", placeholder="مثلاً: ram یا پردازنده")
     with f2:
         active_filter = st.selectbox("وضعیت", ["active", "inactive", "all"], index=0)
     with f3:
         attr_page_size = int(st.selectbox("تعداد در صفحه", [10, 20, 50, 100], index=1, key="attr_page_size"))
-    with f4:
-        if st.button("Refresh"):
-            st.rerun()
 
     reset_page_on_filter_change("attr_page", (q, active_filter, attr_page_size))
     params = active_filter_to_params(active_filter)
 
     try:
-        total_attrs = int(api_get("/canonical/count", q=q or None, **params).get("total", 0))
-        attr_page, _ = render_pagination("attr_page", total_attrs, attr_page_size, "attrs")
-        attr_offset = (attr_page - 1) * attr_page_size
-        attrs = api_get("/canonical", q=q or None, limit=attr_page_size, offset=attr_offset, **params)
+        page = int(st.session_state.get("attr_page", 1) or 1)
+        page_payload = api_get(
+            "/canonical/page",
+            q=q or None,
+            page=page,
+            page_size=attr_page_size,
+            **params,
+        )
+        total_attrs = int(page_payload.get("total", 0))
+        # The API clamps page. Keep session state in sync.
+        st.session_state.attr_page = int(page_payload.get("page", 1))
+        page = render_pager("attr_page", total_attrs, attr_page_size, "attrs")
+
+        # Re-fetch when pager changed page in this run.
+        if page != int(page_payload.get("page", 1)):
+            page_payload = api_get(
+                "/canonical/page",
+                q=q or None,
+                page=page,
+                page_size=attr_page_size,
+                **params,
+            )
+        attrs = page_payload.get("items", [])
 
         if not attrs:
             st.info("هیچ attributeای پیدا نشد.")
         else:
+            render_attribute_table_header()
             for attr in attrs:
-                render_attribute_row(attr)
+                render_attribute_table_row(attr)
+            st.caption("حذف در این پنل به معنی غیرفعال‌سازی امن است، نه پاک کردن فیزیکی از دیتابیس.")
+    except requests.HTTPError as exc:
+        # Fallback for older backend versions that do not have /canonical/page.
+        if exc.response is not None and exc.response.status_code == 404:
+            try:
+                total_attrs = int(api_get("/canonical/count", q=q or None, **params).get("total", 0))
+                page = render_pager("attr_page", total_attrs, attr_page_size, "attrs")
+                offset = (page - 1) * attr_page_size
+                attrs = api_get("/canonical", q=q or None, limit=attr_page_size, offset=offset, **params)
+                if not attrs:
+                    st.info("هیچ attributeای پیدا نشد.")
+                else:
+                    render_attribute_table_header()
+                    for attr in attrs:
+                        render_attribute_table_row(attr)
+            except Exception as fallback_exc:
+                show_error(fallback_exc)
+        else:
+            show_error(exc)
     except Exception as exc:
         show_error(exc)
 
@@ -828,7 +1044,7 @@ with tools_tab:
     st.subheader("Maintenance")
 
     with st.container(border=True):
-        st.markdown("<div class='section-title'>Starter data</div>", unsafe_allow_html=True)
+        st.markdown("<div class='panel-title'>Starter data</div>", unsafe_allow_html=True)
         st.caption("چند canonical اولیه مثل رم، پردازنده، توضیحات و حافظه داخلی می‌سازد.")
         if st.button("Create starter attributes"):
             try:
@@ -843,7 +1059,7 @@ with tools_tab:
                 show_error(exc)
 
     with st.container(border=True):
-        st.markdown("<div class='section-title'>Embeddings</div>", unsafe_allow_html=True)
+        st.markdown("<div class='panel-title'>Embeddings</div>", unsafe_allow_html=True)
         st.caption("بعد از import گروهی یا تغییر مدل، embeddingها را بازسازی کن.")
         if st.button("Reindex all embeddings"):
             try:
@@ -853,7 +1069,7 @@ with tools_tab:
                 show_error(exc)
 
     with st.container(border=True):
-        st.markdown("<div class='section-title'>Health</div>", unsafe_allow_html=True)
+        st.markdown("<div class='panel-title'>Health</div>", unsafe_allow_html=True)
         if st.button("Check API health"):
             try:
                 st.json(api_get("/health"))
